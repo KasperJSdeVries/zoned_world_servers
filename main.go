@@ -1,21 +1,19 @@
 package main
 
 import (
-	"image/color"
 	"log"
 	"math"
-	"math/rand/v2"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 const (
-	screenWidth      = 640
-	screenHeight     = 460
+	screenWidth      = 1280
+	screenHeight     = 920
 	scale            = 64
 	playerCount      = 1024
+	playerSize       = 2
 	playerSpeed      = 30
 	cityCount        = 8
 	cityMinRadius    = 5
@@ -24,110 +22,122 @@ const (
 	cityTargetChance = 0.7
 )
 
-type City struct {
-	posX, posY float32
-	radius     float32
-	color      color.Color
-}
-
-func (c *City) Init() {
-	c.posX = rand.Float32() * screenWidth * scale
-	c.posY = rand.Float32() * screenHeight * scale
-	c.radius = (rand.Float32()*(cityMaxRadius-cityMinRadius) + cityMinRadius) * scale
-	c.color = color.RGBA{
-		R: uint8(rand.Uint32()),
-		G: uint8(rand.Uint32()),
-		B: uint8(rand.Uint32()),
-		A: uint8(math.Floor(cityAlpha * 0xff)),
-	}
-}
-
-func (c *City) Draw(screen *ebiten.Image) {
-	vector.DrawFilledCircle(screen, c.posX/scale, c.posY/scale, c.radius/scale, c.color, true)
-}
-
-type TargetType uint
-
-const (
-	TargetTypePosition TargetType = iota
-	TargetTypeCity
-)
-
-type PositionTarget struct {
+type Vec2 struct {
 	x, y float32
 }
 
-func (t PositionTarget) Type() TargetType             { return TargetTypePosition }
-func (t PositionTarget) Position() (float32, float32) { return t.x, t.y }
-func (t PositionTarget) Radius() float32              { return 1 * scale }
-
-type CityTarget struct {
-	city *City
+type AABB struct {
+	min, max Vec2
 }
 
-func (t CityTarget) Type() TargetType             { return TargetTypeCity }
-func (t CityTarget) Position() (float32, float32) { return t.city.posX, t.city.posY }
-func (t CityTarget) Radius() float32              { return t.city.radius }
-
-type Target interface {
-	Type() TargetType
-	Position() (float32, float32)
-	Radius() float32
+func (a1 *AABB) Contains(a2 AABB) bool {
+	return a1.min.x < a2.min.x && a1.min.y < a2.min.y && a1.max.x > a2.max.x && a1.max.y > a2.max.y
 }
 
-type Player struct {
-	posX, posY float32
-	target     Target
-	color      color.Color
+func (a1 *AABB) Intersects(a2 AABB) bool {
+	return !(a2.max.x > a1.min.x || a2.min.x > a1.max.x || a2.max.y < a1.min.y || a2.min.y > a1.max.y)
 }
 
-func (p *Player) Init(cities [cityCount]City) {
-	p.posX = rand.Float32() * screenWidth * scale
-	p.posY = rand.Float32() * screenHeight * scale
-	p.NewTarget(cities)
+func (bb *AABB) Area() float32 {
+	dx := bb.max.x - bb.min.x
+	dy := bb.max.y - bb.min.y
+	return dx * dy
 }
 
-func (p *Player) NewTarget(cities [cityCount]City) {
-	if rand.Float32() < cityTargetChance {
-		city := cities[rand.UintN(cityCount)]
-		p.target = CityTarget{city: &city}
-		p.color = city.color
-	} else {
-		p.target = PositionTarget{
-			rand.Float32() * screenWidth * scale,
-			rand.Float32() * screenHeight * scale,
+const (
+	maxItems = 64
+	minItems = maxItems / 2
+)
+
+type NodeKind uint8
+
+const (
+	NodeKindLeaf NodeKind = iota
+	NodeKindBranch
+)
+
+type Node struct {
+	kind     NodeKind
+	bounds   AABB
+	datas [maxItems]*Player
+	children [maxItems]*Node
+}
+
+func (n *Node) Search(area AABB) []uint64 {
+	switch n.kind {
+	case NodeKindBranch:
+		var found []uint64
+		for _, e := range n.children {
+			if area.Contains(e.bounds) {
+				found = append(found, e.Search(area)...)
+			}
 		}
-		p.color = color.RGBA{
-			R: uint8(rand.Uint32()),
-			G: uint8(rand.Uint32()),
-			B: uint8(rand.Uint32()),
-			A: 0xff,
+		return found
+	case NodeKindLeaf:
+		var found []uint64
+		for _, e := range n.datas {
+			if area.Intersects(e.bounds) {
+				found = append(found, e)
+			}
+		}
+		return found
+	}
+
+	return []uint64{}
+}
+
+func (n *Node) ChooseLeaf(bounds AABB) *Node {
+	if n.kind == NodeKindLeaf {
+		return n
+	}
+
+	var best *Node
+	metric := math.Inf(1)
+	for _, f := range n.children {
+		if f.bounds.Contains(bounds) {
+			if best == nil || f.bounds.Area() < best.bounds.Area() {
+				metric = 0
+				best = f
+			}
+		} else if metric != 0 {
+			fMetric := 0.0
+			fMetric += math.Min(0, float64(f.bounds.min.x-bounds.min.x))
+			fMetric += math.Min(0, float64(f.bounds.min.y-bounds.min.y))
+			fMetric += math.Min(0, float64(bounds.max.x-f.bounds.max.x))
+			fMetric += math.Min(0, float64(bounds.max.y-f.bounds.max.y))
+			if fMetric < metric {
+				best = f
+				metric = fMetric
+			}
 		}
 	}
+	return best.ChooseLeaf(bounds)
 }
 
-func (p *Player) Update(cities [cityCount]City) {
-	tx, ty := p.target.Position()
-
-	dx := tx - p.posX
-	dy := ty - p.posY
-
-	mag2 := dx*dx + dy*dy
-	mag := float32(math.Sqrt(float64(mag2)))
-	speed := playerSpeed
-	if (p.target.Type() == TargetTypeCity) {
-		speed *= 2;
-	}
-	p.posX += (1.0 / 60.0) * (dx / mag) * scale * float32(speed)
-	p.posY += (1.0 / 60.0) * (dy / mag) * scale * float32(speed)
-
-	if dx*dx+dy*dy < p.target.Radius()*p.target.Radius() {
-		p.NewTarget(cities)
-	}
+type RTree struct {
+	bounds AABB
+	root   *Node
+	items  map[uint64]*Player
+	count  uint64
 }
 
-func (p *Player) Draw(screen *ebiten.Image) {
-	vector.DrawFilledCircle(screen, p.posX/scale, p.posY/scale, 1, p.color, true)
+func (r *RTree) Search(area AABB) []*Player {
+	ids := r.root.Search(area)
+	var players []*Player
+	for _, id := range ids {
+		players = append(players, r.items[id])
+	}
+	return players
+}
+
+func (r *RTree) Insert(player *Player) {
+	newItemId := r.count
+	r.count++
+	r.items[newItemId] = player
+
+	itemBounds := AABB{min: Vec2{player.posX, player.posY}, max: Vec2{player.posX, player.posY}}
+	l := r.root.ChooseLeaf(itemBounds)
+	if l.
 }
 
 type Game struct {
