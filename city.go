@@ -10,15 +10,15 @@ import (
 )
 
 type City struct {
-	posX, posY float32
-	radius     float32
+	posX, posY float64
+	radius     float64
 	color      color.Color
 }
 
 func (c *City) Init() {
-	c.posX = rand.Float32() * screenWidth * scale
-	c.posY = rand.Float32() * screenHeight * scale
-	c.radius = (rand.Float32()*(cityMaxRadius-cityMinRadius) + cityMinRadius) * scale
+	c.posX = rand.Float64() * screenWidth * scale
+	c.posY = rand.Float64() * screenHeight * scale
+	c.radius = (rand.Float64()*(cityMaxRadius-cityMinRadius) + cityMinRadius) * scale
 	c.color = color.RGBA{
 		R: uint8(rand.Uint32()),
 		G: uint8(rand.Uint32()),
@@ -28,5 +28,5 @@ func (c *City) Init() {
 }
 
 func (c *City) Draw(screen *ebiten.Image) {
-	vector.DrawFilledCircle(screen, c.posX/scale, c.posY/scale, c.radius/scale, c.color, true)
+	vector.DrawFilledCircle(screen, float32(c.posX/scale), float32(c.posY/scale), float32(c.radius/scale), c.color, true)
 }
