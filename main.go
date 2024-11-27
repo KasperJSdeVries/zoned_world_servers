@@ -3,20 +3,19 @@ package main
 import (
 	"image/color"
 	"log"
-	"math"
-	"math/rand/v2"
 
+	"github.com/dhconnelly/rtreego"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 const (
-	screenWidth      = 640
-	screenHeight     = 460
+	screenWidth      = 1280
+	screenHeight     = 920
 	scale            = 64
 	playerCount      = 1024
-	playerSpeed      = 30
+	playerSize       = 2
+	playerSpeed      = 30.0
 	cityCount        = 8
 	cityMinRadius    = 5
 	cityMaxRadius    = 20
@@ -24,125 +23,27 @@ const (
 	cityTargetChance = 0.7
 )
 
-type City struct {
-	posX, posY float32
-	radius     float32
-	color      color.Color
-}
-
-func (c *City) Init() {
-	c.posX = rand.Float32() * screenWidth * scale
-	c.posY = rand.Float32() * screenHeight * scale
-	c.radius = (rand.Float32()*(cityMaxRadius-cityMinRadius) + cityMinRadius) * scale
-	c.color = color.RGBA{
-		R: uint8(rand.Uint32()),
-		G: uint8(rand.Uint32()),
-		B: uint8(rand.Uint32()),
-		A: uint8(math.Floor(cityAlpha * 0xff)),
-	}
-}
-
-func (c *City) Draw(screen *ebiten.Image) {
-	vector.DrawFilledCircle(screen, c.posX/scale, c.posY/scale, c.radius/scale, c.color, true)
-}
-
-type TargetType uint
-
-const (
-	TargetTypePosition TargetType = iota
-	TargetTypeCity
-)
-
-type PositionTarget struct {
-	x, y float32
-}
-
-func (t PositionTarget) Type() TargetType             { return TargetTypePosition }
-func (t PositionTarget) Position() (float32, float32) { return t.x, t.y }
-func (t PositionTarget) Radius() float32              { return 1 * scale }
-
-type CityTarget struct {
-	city *City
-}
-
-func (t CityTarget) Type() TargetType             { return TargetTypeCity }
-func (t CityTarget) Position() (float32, float32) { return t.city.posX, t.city.posY }
-func (t CityTarget) Radius() float32              { return t.city.radius }
-
-type Target interface {
-	Type() TargetType
-	Position() (float32, float32)
-	Radius() float32
-}
-
-type Player struct {
-	posX, posY float32
-	target     Target
-	color      color.Color
-}
-
-func (p *Player) Init(cities [cityCount]City) {
-	p.posX = rand.Float32() * screenWidth * scale
-	p.posY = rand.Float32() * screenHeight * scale
-	p.NewTarget(cities)
-}
-
-func (p *Player) NewTarget(cities [cityCount]City) {
-	if rand.Float32() < cityTargetChance {
-		city := cities[rand.UintN(cityCount)]
-		p.target = CityTarget{city: &city}
-		p.color = city.color
-	} else {
-		p.target = PositionTarget{
-			rand.Float32() * screenWidth * scale,
-			rand.Float32() * screenHeight * scale,
-		}
-		p.color = color.RGBA{
-			R: uint8(rand.Uint32()),
-			G: uint8(rand.Uint32()),
-			B: uint8(rand.Uint32()),
-			A: 0xff,
-		}
-	}
-}
-
-func (p *Player) Update(cities [cityCount]City) {
-	tx, ty := p.target.Position()
-
-	dx := tx - p.posX
-	dy := ty - p.posY
-
-	mag2 := dx*dx + dy*dy
-	mag := float32(math.Sqrt(float64(mag2)))
-	speed := playerSpeed
-	if (p.target.Type() == TargetTypeCity) {
-		speed *= 2;
-	}
-	p.posX += (1.0 / 60.0) * (dx / mag) * scale * float32(speed)
-	p.posY += (1.0 / 60.0) * (dy / mag) * scale * float32(speed)
-
-	if dx*dx+dy*dy < p.target.Radius()*p.target.Radius() {
-		p.NewTarget(cities)
-	}
-}
-
-func (p *Player) Draw(screen *ebiten.Image) {
-	vector.DrawFilledCircle(screen, p.posX/scale, p.posY/scale, 1, p.color, true)
-}
-
 type Game struct {
 	cities  [cityCount]City
 	players [playerCount]Player
+	rt      *rtreego.Rtree
+	tree    *Quadtree
 }
 
 func NewGame() *Game {
-	g := &Game{}
+	g := &Game{
+		rt:   rtreego.NewTree(2, 8, 16),
+		tree: NewQuadtree(0, screenWidth*scale, 0, screenHeight*scale, 8, 4, 16),
+	}
 	for i := 0; i < cityCount; i++ {
 		g.cities[i].Init()
 	}
 	for i := 0; i < playerCount; i++ {
 		g.players[i].Init(g.cities)
+		g.rt.Insert(&(g.players[i]))
+		g.tree.AddPoint(g.players[i])
 	}
+
 	return g
 }
 
@@ -151,16 +52,28 @@ func (g *Game) Update() error {
 		x, y := ebiten.CursorPosition()
 		for i := 0; i < playerCount; i++ {
 			g.players[i].target = PositionTarget{
-				x: float32(x) * scale,
-				y: float32(y) * scale,
+				x: float64(x) * scale,
+				y: float64(y) * scale,
 			}
 		}
 	}
 
 	for i := 0; i < playerCount; i++ {
+		g.rt.Delete(&g.players[i])
 		g.players[i].Update(g.cities)
+		g.tree.MovePoint(g.players[i])
+		g.rt.Insert(&g.players[i])
 	}
+
+	g.tree.BalanceRegions()
+
 	return nil
+}
+
+func DrawRect(screen *ebiten.Image, rect rtreego.Rect) {
+	min := Vec2{float32(rect.PointCoord(0)) / scale, float32(rect.PointCoord(1)) / scale}
+	max := Vec2{min.x + float32(rect.LengthsCoord(0))/scale, min.y + float32(rect.LengthsCoord(1))/scale}
+	(&AABB{min, max}).Draw(screen, color.RGBA{0x0f, 0x0b, 0x0d, 0x09})
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -170,6 +83,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i := 0; i < playerCount; i++ {
 		g.players[i].Draw(screen)
 	}
+	for _, bbox := range g.rt.GetAllBoundingBoxes() {
+		DrawRect(screen, bbox)
+	}
+	g.tree.DebugRegions(screen)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

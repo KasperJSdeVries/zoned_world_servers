@@ -2,7 +2,10 @@ module github.com/KasperJSdeVries/zoned_world_servers
 
 go 1.23.3
 
-require github.com/hajimehoshi/ebiten/v2 v2.8.5
+require (
+	github.com/dhconnelly/rtreego v1.2.0
+	github.com/hajimehoshi/ebiten/v2 v2.8.5
+)
 
 require (
 	github.com/ebitengine/gomobile v0.0.0-20240911145611-4856209ac325 // indirect
