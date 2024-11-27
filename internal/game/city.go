@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"image/color"
@@ -16,8 +16,8 @@ type City struct {
 }
 
 func (c *City) Init() {
-	c.posX = rand.Float64() * screenWidth * scale
-	c.posY = rand.Float64() * screenHeight * scale
+	c.posX = rand.Float64() * ScreenWidth * scale
+	c.posY = rand.Float64() * ScreenHeight * scale
 	c.radius = (rand.Float64()*(cityMaxRadius-cityMinRadius) + cityMinRadius) * scale
 	c.color = color.RGBA{
 		R: uint8(rand.Uint32()),

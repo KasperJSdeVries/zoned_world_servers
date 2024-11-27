@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"image/color"
@@ -51,8 +51,8 @@ var playerId int
 func (p *Player) Init(cities [cityCount]City) {
 	p.ID = playerId
 	playerId++
-	p.X = rand.Float64() * screenWidth * scale
-	p.Y = rand.Float64() * screenHeight * scale
+	p.X = rand.Float64() * ScreenWidth * scale
+	p.Y = rand.Float64() * ScreenHeight * scale
 	p.NewTarget(cities)
 }
 
@@ -63,8 +63,8 @@ func (p *Player) NewTarget(cities [cityCount]City) {
 		p.color = city.color
 	} else {
 		p.target = PositionTarget{
-			rand.Float64() * screenWidth * scale,
-			rand.Float64() * screenHeight * scale,
+			rand.Float64() * ScreenWidth * scale,
+			rand.Float64() * ScreenHeight * scale,
 		}
 		p.color = color.RGBA{
 			R: uint8(rand.Uint32()),

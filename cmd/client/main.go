@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
-	"github.com/KasperJSdeVries/zoned_world_servers/internal/common/vec"
+
+	"github.com/KasperJSdeVries/zoned_world_servers/internal/vec"
 )
 
 func main() {
@@ -36,5 +37,5 @@ func main() {
 	}
 	defer conn.Close()
 
-	conn.Write()
+	conn.Write([]byte(position.String()))
 }
