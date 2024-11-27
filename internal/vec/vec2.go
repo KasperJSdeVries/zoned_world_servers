@@ -7,5 +7,5 @@ type Vec2 struct {
 }
 
 func (v *Vec2) String() string {
-	return fmt.Sprintf("(%d,%d)", v.X, v.Y)
+	return fmt.Sprintf("(%f,%f)", v.X, v.Y)
 }

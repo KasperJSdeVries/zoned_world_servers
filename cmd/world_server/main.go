@@ -2,43 +2,31 @@ package main
 
 import (
 	"fmt"
-	"net"
+	"os"
+
+	"github.com/maurice2k/tcpserver"
+
+	"github.com/KasperJSdeVries/zoned_world_servers/internal/packet"
 )
 
+const Port = 40000
+
 func main() {
-	// pc, err := net.ListenPacket("udp", "localhost:40000")
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
-	// defer pc.Close()
-	//
-	// buffer := make([]byte, 100)
-	// n, clientAddr, err := pc.ReadFrom(buffer)
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
-	//
-	// fmt.Println("Received", n, "bytes:", string(buffer), "from", clientAddr.String())
-
-	l, err := net.Listen("tcp", "localhost:40000")
+	server, err := tcpserver.NewServer(fmt.Sprintf("localhost:%d", Port))
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		fmt.Printf("error: could not start tcp server: %v\n", err)
+		os.Exit(1)
 	}
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	fmt.Println("Got connection from:", conn.RemoteAddr().String())
+	server.SetRequestHandler(requestHandler)
+	server.Listen()
+	server.Serve()
+}
 
-	var buf []byte
-	_, err = conn.Read(buf)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+func requestHandler(conn tcpserver.Connection) {
+	for {
+		packetData := packet.ReadPacket(conn)
+		switch packetData[0] {
+		}
 	}
 }
