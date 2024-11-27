@@ -2,11 +2,9 @@ package main
 
 import (
 	"image/color"
-	"log"
 	"math"
 	"math/rand/v2"
 
-	"github.com/dhconnelly/rtreego"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
@@ -41,10 +39,11 @@ type Target interface {
 }
 
 type Player struct {
-	X, Y   float64
-	target Target
-	color  color.Color
-	ID     int
+	X, Y     float64
+	target   Target
+	color    color.Color
+	ID       int
+	RegionId int
 }
 
 var playerId int
@@ -55,17 +54,6 @@ func (p *Player) Init(cities [cityCount]City) {
 	p.X = rand.Float64() * screenWidth * scale
 	p.Y = rand.Float64() * screenHeight * scale
 	p.NewTarget(cities)
-}
-
-func (p *Player) Bounds() rtreego.Rect {
-	rect, err := rtreego.NewRectFromPoints(
-		rtreego.Point{float64(p.X), float64(p.Y)},
-		rtreego.Point{float64(p.X), float64(p.Y)},
-	)
-	if err != nil {
-		log.Fatal("could not create bounds for player")
-	}
-	return rect
 }
 
 func (p *Player) NewTarget(cities [cityCount]City) {
